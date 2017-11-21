@@ -58,354 +58,73 @@ describe("Isotropy FS", () => {
       ]
     };
 
-    elasticsearch.init("testdisk", tree);
+    elasticsearch.init("testelastic", tree);
   });
 
   /* createFile */
 
-  it(`Creates a file`, async () => {
-    const disk = await elasticsearch.open("testdisk");
-    await disk.createFile("/docs/report.txt", "Pluto is a planet.");
-    const file = find(elasticsearch.__data("testdisk"), "/docs/report.txt");
-    file.name.should.equal("report.txt");
-    file.contents.should.equal("Pluto is a planet.");
-  });
-
-  it(`Creates or overwrites a file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
+  it(`Indexes a document with index`, async () => {
+    const es = await es.open("testelastic");
+    const resp = await es.index({
+      index: "blogs",
+      type: "post",
+      id: "10",
+      body: {
+        title: "Eleven",
+        content: "This one goes to 11",
+        tags: "taggingalong"
+      }
     });
-    const disk = await elasticsearch.open("testdisk");
-    await disk.createFile(path, "Pluto is a planet.", { overwrite: true });
-    const file = find(elasticsearch.__data("testdisk"), path);
-    file.name.should.equal(filename);
-    file.contents.should.equal("Pluto is a planet.");
+    const stored = find(es.__data("testelastic"), "blogs").filter(
+      x => x.type === "post" && x.id === "10"
+    );
+
+    stored.length.should.equal(1);
+    stored[0].id.should.equal("10");
   });
 
-  it(`Fails to overwrite existing file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
+  it(`Indexes a document without an index`, async () => {
+    const es = await es.open("testelastic");
+    const resp = await es.index({
+      index: "blogs",
+      type: "post",
+      body: {
+        title: "Eleven",
+        content: "This one goes to 11",
+        tags: "taggingalong"
+      }
     });
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.createFile(path, "Pluto is a planet.", { overwrite: false });
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /docs/report.txt already exists.");
+    const stored = find(es.__data("testelastic"), "blogs").filter(
+      x => x.type === "post" && x.id === "10"
+    );
+
+    stored.length.should.equal(1);
+    stored[0].id.should.equal("5");
   });
 
-  /* readFile */
-  it(`Reads a file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
+  it(`Deletes a document`, async () => {
+    const es = await es.open("testelastic");
+    const resp = await es.remove({
+      index: "blogs",
+      type: "post",
+      body: {
+        title: "Eleven",
+        content: "This one goes to 11",
+        tags: "taggingalong"
+      }
     });
-    const disk = await elasticsearch.open("testdisk");
-    const contents = await disk.readFile(path);
-    contents.should.equal("Pluto downgraded to a rock.");
+    const stored = find(es.__data("testelastic"), "blogs").filter(
+      x => x.type === "post" && x.id === "10"
+    );
+
+    stored.length.should.equal(1);
+    stored[0].id.should.equal("5");
   });
 
-  /* readFile */
-  it(`Fails to read a missing file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      const contents = await disk.readFile(path);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /docs/report.txt does not exist.");
-  });
-
-  /* readDir */
-  it(`Reads a directory`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    const files = await disk.readDir(path);
-    files.should.deepEqual([
-      "/pics/asterix.jpg",
-      "/pics/obelix.jpg",
-      "/pics/large-pics"
-    ]);
-  });
-
-  it(`Fails to read missing directory`, async () => {
-    const path = "/pics/missing";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      const files = await disk.readDir(path);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /pics/missing does not exist.");
-  });
-
-  /* readDirRecursive */
-  it(`Reads a directory recursively`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    const files = await disk.readDirRecursive(path);
-    files.should.deepEqual([
-      "/pics/asterix.jpg",
-      "/pics/obelix.jpg",
-      "/pics/large-pics",
-      "/pics/large-pics/asterix-large.jpg",
-      "/pics/large-pics/obelix-large.jpg",
-      "/pics/large-pics/backup",
-      "/pics/large-pics/backup/asterix-large-bak.jpg",
-      "/pics/large-pics/backup/obelix-large-bak.jpg"
-    ]);
-  });
-
-  /* createDir */
-  it(`Create a directory`, async () => {
-    const path = "/pics/secret";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.createDir(path);
-    const dir = find(elasticsearch.__data("testdisk"), "/pics/secret");
-    dir.name.should.equal("secret");
-    dir.contents.should.be.an.instanceOf(Array);
-  });
-
-  /* move */
-  it(`Remove a node`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.remove(path);
-    const dir = find(elasticsearch.__data("testdisk"), "/");
-    dir.contents.length.should.equal(1);
-  });
-
-  /* move */
-  it(`Move a node`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.move(path, newPath);
-    const loopDir = find(elasticsearch.__data("testdisk"), "/");
-    loopDir.contents.length.should.equal(3);
-    const largePicsDir = find(elasticsearch.__data("testdisk"), "/pics/large-pics");
-    largePicsDir.contents.length.should.equal(2);
-  });
-
-  it(`Rename a node`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/pics/large-pics/storage";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.move(path, newPath);
-    const largePicsDir = find(elasticsearch.__data("testdisk"), "/pics/large-pics");
-    should.not.exist(largePicsDir.contents.find(x => x.name === "backup"));
-    largePicsDir.contents.find(x => x.name === "storage").should.not.be.empty();
-  });
-
-  it(`Fails to move a directory into an existing file path`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/pics/asterix.jpg";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.move(path, newPath);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /pics/asterix.jpg already exists.");
-  });
-
-  it(`Creates or overwrites a file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
-    });
-    const disk = await elasticsearch.open("testdisk");
-    await disk.createFile(path, "Pluto is a planet.", { overwrite: true });
-    const file = find(elasticsearch.__data("testdisk"), path);
-    file.name.should.equal(filename);
-    file.contents.should.equal("Pluto is a planet.");
-  });
-
-  it(`Fails to overwrite existing file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
-    });
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.createFile(path, "Pluto is a planet.", { overwrite: false });
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /docs/report.txt already exists.");
-  });
-
-  /* readFile */
-  it(`Reads a file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    const dir = find(elasticsearch.__data("testdisk"), "/docs");
-    dir.contents = dir.contents.concat({
-      name: "report.txt",
-      contents: "Pluto downgraded to a rock."
-    });
-    const disk = await elasticsearch.open("testdisk");
-    const contents = await disk.readFile(path);
-    contents.should.equal("Pluto downgraded to a rock.");
-  });
-
-  /* readFile */
-  it(`Fails to read a missing file`, async () => {
-    const path = "/docs/report.txt";
-    const filename = "report.txt";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      const contents = await disk.readFile(path);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /docs/report.txt does not exist.");
-  });
-
-  /* readDir */
-  it(`Reads a directory`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    const files = await disk.readDir(path);
-    files.should.deepEqual([
-      "/pics/asterix.jpg",
-      "/pics/obelix.jpg",
-      "/pics/large-pics"
-    ]);
-  });
-
-  it(`Fails to read missing directory`, async () => {
-    const path = "/pics/missing";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      const files = await disk.readDir(path);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /pics/missing does not exist.");
-  });
-
-  /* readDirRecursive */
-  it(`Reads a directory recursively`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    const files = await disk.readDirRecursive(path);
-    files.should.deepEqual([
-      "/pics/asterix.jpg",
-      "/pics/obelix.jpg",
-      "/pics/large-pics",
-      "/pics/large-pics/asterix-large.jpg",
-      "/pics/large-pics/obelix-large.jpg",
-      "/pics/large-pics/backup",
-      "/pics/large-pics/backup/asterix-large-bak.jpg",
-      "/pics/large-pics/backup/obelix-large-bak.jpg"
-    ]);
-  });
-
-  /* createDir */
-  it(`Create a directory`, async () => {
-    const path = "/pics/secret";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.createDir(path);
-    const dir = find(elasticsearch.__data("testdisk"), "/pics/secret");
-    dir.name.should.equal("secret");
-    dir.contents.should.be.an.instanceOf(Array);
-  });
-
-  /* move */
-  it(`Remove a node`, async () => {
-    const path = "/pics";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.remove(path);
-    const dir = find(elasticsearch.__data("testdisk"), "/");
-    dir.contents.length.should.equal(1);
-  });
-
-  /* move */
-  it(`Move a node`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.move(path, newPath);
-    const loopDir = find(elasticsearch.__data("testdisk"), "/");
-    loopDir.contents.length.should.equal(3);
-    const largePicsDir = find(elasticsearch.__data("testdisk"), "/pics/large-pics");
-    largePicsDir.contents.length.should.equal(2);
-  });
-
-  it(`Rename a node`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/pics/large-pics/storage";
-    const disk = await elasticsearch.open("testdisk");
-    await disk.move(path, newPath);
-    const largePicsDir = find(elasticsearch.__data("testdisk"), "/pics/large-pics");
-    should.not.exist(largePicsDir.contents.find(x => x.name === "backup"));
-    largePicsDir.contents.find(x => x.name === "storage").should.not.be.empty();
-  });
-
-  it(`Fails to move a directory into an existing file path`, async () => {
-    const path = "/pics/large-pics/backup";
-    const newPath = "/pics/asterix.jpg";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.move(path, newPath);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("The path /pics/asterix.jpg already exists.");
-  });
-
-  it(`Fails to move a directory into a sub-directory`, async () => {
-    const path = "/pics";
-    const newPath = "/pics/large-pics";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.move(path, newPath);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("Cannot move to the same path /pics.");
-  });
-
-  it(`Fails to move a directory into a sub-directory`, async () => {
-    const path = "/pics";
-    const newPath = "/pics/large-pics";
-    let ex;
-    try {
-      const disk = await elasticsearch.open("testdisk");
-      await disk.move(path, newPath);
-    } catch (_ex) {
-      ex = _ex;
-    }
-    ex.message.should.equal("Cannot move to the same path /pics.");
+  it(`Gets a document`, async () => {
+    const es = await es.open("testelastic");
+    const resp = await es.get("3");
+    resp.id.should.equal("3");
+    resp.title.should.equal("Hello World");
   });
 });

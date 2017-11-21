@@ -1,6 +1,6 @@
 class ElasticSearch {
-  constructor() {
-
+  constructor(docs) {
+    
   }
 
   exists() {
